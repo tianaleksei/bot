@@ -77,18 +77,16 @@ def send_telegram_report():
     winrate = round((wins / len(trade_log)) * 100, 2) if trade_log else 0
 
     message = (
-        f"Ежедневный отчёт (Render)
-"
-        f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"
-        f"Прибыль: {profit} USDT ({percent_profit}%)
-"
-        f"Баланс: {round(balance, 2)} USDT
-"
-        f"Сделок: {len(trade_log)}
-"
-        f"Winrate: {winrate}%"
-    )
+    f"Ежедневный отчёт (Render)\n"
+    f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    f"\n"
+    f"Прибыль: {profit} USDT ({percent_profit}%)\n"
+    f"Баланс: {round(balance, 2)} USDT\n"
+    f"Сделок: {len(trade_log)}\n"
+    f"Победы: {wins}\n"
+    f"Поражения: {losses}\n"
+    f"Winrate: {winrate}%\n"
+)
     send_telegram_message(message)
 
 app = flask.Flask(__name__)
