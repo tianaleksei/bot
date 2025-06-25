@@ -1,149 +1,121 @@
-import pandas as pd
-import numpy as np
-import time
-import requests
-from datetime import datetime
-import threading
-import flask
-import json
 import os
+import time
+import json
+import numpy as np
+from flask import Flask
 
-# ==== CONFIGURATION ====
-INITIAL_BALANCE = 200.0
-USE_PERCENT = True
-RISK_PER_TRADE = 0.15
-USE_PAPER_TRADING = True
+app = Flask(__name__)
 
-# Telegram
-TELEGRAM_TOKEN = "8112838643:AAEEIBuuEBrXzGWNs1CAm6KFv9PDXaLO4h0"
-TELEGRAM_CHAT_ID = "81109346"
+# === Telegram config ===
+import requests
+BOT_TOKEN = "8112838643:AAEEIBuuEBrXzGWNs1CAm6KFv9PDXaLO4h0"
+CHAT_ID = "8112838643"
 
+# === Constants ===
+STATE_FILE = "state.json"
+STOP_FILE = "stop"
 
-SAVE_FILE = "bot_state.json"
-STOP_FILE = "stop_signal.txt"
-
-if os.path.exists(SAVE_FILE):
-    with open(SAVE_FILE, 'r') as f:
-        saved = json.load(f)
-        balance = saved.get("balance", INITIAL_BALANCE)
-        trade_log = saved.get("trade_log", [])
-else:
-    balance = INITIAL_BALANCE
-    trade_log = []
-
-price_history = []
-report_timer = time.time()
+# === Initial state ===
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
+    return {"balance": 100.0, "trade_log": [], "report_timer": time.time(), "open_trade": None}
 
 def save_state():
-    with open(SAVE_FILE, 'w') as f:
-        json.dump({"balance": balance, "trade_log": trade_log}, f)
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
 
-def get_fake_price():
-    base_price = 3500
-    volatility = 0.01
-    change = np.random.normal(0, volatility)
-    price = get_fake_price.last_price * (1 + change)
-    get_fake_price.last_price = price
-    return round(price, 2)
-get_fake_price.last_price = 3500
+state = load_state()
+balance = state.get("balance", 100.0)
+trade_log = state.get("trade_log", [])
+report_timer = state.get("report_timer", time.time())
+open_trade = state.get("open_trade")
 
-def calculate_rsi(prices, period=14):
-    if len(prices) < period:
-        return 50
-    delta = np.diff(prices[-period:])
-    gains = [d for d in delta if d > 0]
-    losses = [-d for d in delta if d < 0]
-    gain = np.mean(gains) if gains else 0
-    loss = np.mean(losses) if losses else 0
-    if loss == 0:
-        return 100
-    rs = gain / loss
-    return round(100 - (100 / (1 + rs)), 2)
-
-def send_telegram_message(text):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": text}
+# === Telegram ===
+def send_telegram_message(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": msg}
     try:
-        requests.post(url, data=data)
+        requests.post(url, data=payload)
     except Exception as e:
-        print("Ошибка Telegram:", e)
+        print(f"Telegram error: {e}")
 
 def send_telegram_report():
-    profit = round(balance - INITIAL_BALANCE, 2)
-    percent_profit = round((balance / INITIAL_BALANCE - 1) * 100, 2)
-    wins = sum(1 for t in trade_log if t['result'] == 'tp')
-    losses = sum(1 for t in trade_log if t['result'] == 'sl')
-    winrate = round((wins / len(trade_log)) * 100, 2) if trade_log else 0
-
-    message = (
-    f"Ежедневный отчёт (Render)\n"
-    f"Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-    f"\n"
-    f"Прибыль: {profit} USDT ({percent_profit}%)\n"
-    f"Баланс: {round(balance, 2)} USDT\n"
-    f"Сделок: {len(trade_log)}\n"
-    f"Победы: {wins}\n"
-    f"Поражения: {losses}\n"
-    f"Winrate: {winrate}%\n"
-)
+    message = "📊 Ежедневный отчёт (Render)\n"
+    for t in trade_log[-10:]:
+        message += f"Цена: {t['price']}, Результат: {t['result']}, Баланс: {t['balance']}\n"
     send_telegram_message(message)
+    print("📤 Отправлен Telegram отчёт")
 
-app = flask.Flask(__name__)
-@app.route('/')
-def home():
-    return "Bot is running"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=10000)
-
-threading.Thread(target=run_flask).start()
+# === Bot logic ===
+def get_price():
+    return round(np.random.uniform(30000, 40000), 2)
 
 def run_bot_once():
-    global balance, trade_log, price_history, report_timer
+    global balance, trade_log, report_timer, open_trade
 
-    price = get_fake_price()
-    price_history.append(price)
-    if len(price_history) > 100:
-        price_history = price_history[-100:]
+    price = get_price()
+    print(f"🔄 Проверка рынка. Цена: {price}")
 
-    rsi = calculate_rsi(price_history)
-    entry_signal = rsi < 30 or (len(price_history) > 1 and (price / price_history[-2] - 1) < -0.02)
+    if open_trade:
+        print("📈 Есть открытая сделка, проверяем TP/SL")
+        entry = open_trade['entry_price']
+        direction = open_trade['direction']
+        tp = open_trade['tp']
+        sl = open_trade['sl']
 
-    if entry_signal:
-        size = balance * RISK_PER_TRADE if USE_PERCENT else 10
-        tp = price * 1.01
-        sl = price * 0.99
-        outcome = np.random.choice(['tp', 'sl'], p=[0.6, 0.4])
-
-        if outcome == 'tp':
-            balance += size * 0.01
+        if (direction == "long" and price >= tp) or (direction == "short" and price <= tp):
+            result = "tp"
+            balance += 0.01 * price
+        elif (direction == "long" and price <= sl) or (direction == "short" and price >= sl):
+            result = "sl"
+            balance -= 0.01 * price
         else:
-            balance -= size * 0.01
+            print("💤 Сделка в рынке. TP/SL не достигнуты.")
+            return
 
-        trade_log.append({"price": price, "result": outcome, "balance": round(balance, 2)})
-        save_state()
+        trade_log.append({"price": price, "result": result, "balance": round(balance, 2)})
+        open_trade = None
+        print(f"✅ Сделка закрыта по {result.upper()}. Баланс: {round(balance, 2)}")
+
+    else:
+        entry_price = price
+        tp = entry_price * 1.01
+        sl = entry_price * 0.99
+        open_trade = {"entry_price": entry_price, "direction": "long", "tp": tp, "sl": sl}
+        print(f"📥 Открыта сделка: Long {entry_price}, TP: {tp}, SL: {sl}")
+
+    state["balance"] = balance
+    state["trade_log"] = trade_log
+    state["report_timer"] = report_timer
+    state["open_trade"] = open_trade
+    save_state()
 
     if time.time() - report_timer > 3600:
         send_telegram_report()
         report_timer = time.time()
 
-    save_state()
     time.sleep(30)
 
 def stop_signal_detected():
     return os.path.exists(STOP_FILE)
 
-while True:
+@app.route("/")
+def index():
+    return "Bot is running."
+
+if __name__ == "__main__":
     send_telegram_message("✅ Бот запущен на Render. Начинаем работу.")
+    print("✅ Бот запущен на Render")
+
     try:
         while True:
             run_bot_once()
             if stop_signal_detected():
-                send_telegram_message("📴 Получен сигнал остановки. Бот завершает работу.")
+                send_telegram_message("🛑 Получен сигнал остановки. Бот завершает работу.")
                 os.remove(STOP_FILE)
                 break
     except Exception as e:
         send_telegram_message(f"⚠️ Ошибка: {e}")
-        time.sleep(5)
+        print(f"⚠️ Ошибка: {e}")
