@@ -121,6 +121,7 @@ def run():
         send_telegram_message(f"⚠️ Ошибка: {e}")
         print(f"⚠️ Ошибка: {e}")
 
+
 def telegram_listener():
     last_update_id = None
     while True:
@@ -136,10 +137,16 @@ def telegram_listener():
                     with open(STOP_FILE, "w") as f:
                         f.write("stop")
                     send_telegram_message("🛑 Команда /stop получена. Остановка бота.")
+                elif message == "/start":
+                    if not stop_signal_detected():
+                        send_telegram_message("⚙️ Бот уже работает.")
+                    else:
+                        os.remove(STOP_FILE)
+                        send_telegram_message("▶️ Команда /start получена. Перезапуск бота.")
+                        threading.Thread(target=run).start()
         except Exception as e:
             print(f"Ошибка в Telegram listener: {e}")
         time.sleep(5)
 
-# === Start threads ===
 threading.Thread(target=run).start()
 threading.Thread(target=telegram_listener).start()
