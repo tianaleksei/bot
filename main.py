@@ -105,7 +105,7 @@ def stop_signal_detected():
 def index():
     return "Bot is running."
 
-if __name__ == "__main__":
+def run():
     send_telegram_message("✅ Бот запущен на Render. Начинаем работу.")
     print("✅ Бот запущен на Render")
 
@@ -119,3 +119,6 @@ if __name__ == "__main__":
     except Exception as e:
         send_telegram_message(f"⚠️ Ошибка: {e}")
         print(f"⚠️ Ошибка: {e}")
+
+import threading
+threading.Thread(target=run).start()
