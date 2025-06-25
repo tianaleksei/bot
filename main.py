@@ -3,11 +3,12 @@ import time
 import json
 import numpy as np
 from flask import Flask
+import threading
+import requests
 
 app = Flask(__name__)
 
 # === Telegram config ===
-import requests
 BOT_TOKEN = "8112838643:AAEEIBuuEBrXzGWNs1CAm6KFv9PDXaLO4h0"
 CHAT_ID = "8112838643"
 
@@ -120,5 +121,4 @@ def run():
         send_telegram_message(f"⚠️ Ошибка: {e}")
         print(f"⚠️ Ошибка: {e}")
 
-import threading
 threading.Thread(target=run).start()
