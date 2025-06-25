@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: rsi-bot
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: python3 main.py
+    envVars:
+      - key: TELEGRAM_TOKEN
+        value: 8112838643:AAEEIBuuEBrXzGWNs1CAm6KFv9PDXaLO4h0
+      - key: TELEGRAM_CHAT_ID
+        value: 81109346
