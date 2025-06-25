@@ -121,4 +121,25 @@ def run():
         send_telegram_message(f"⚠️ Ошибка: {e}")
         print(f"⚠️ Ошибка: {e}")
 
+def telegram_listener():
+    last_update_id = None
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
+            if last_update_id:
+                url += f"?offset={last_update_id + 1}"
+            res = requests.get(url).json()
+            for update in res.get("result", []):
+                last_update_id = update["update_id"]
+                message = update.get("message", {}).get("text", "")
+                if message == "/stop":
+                    with open(STOP_FILE, "w") as f:
+                        f.write("stop")
+                    send_telegram_message("🛑 Команда /stop получена. Остановка бота.")
+        except Exception as e:
+            print(f"Ошибка в Telegram listener: {e}")
+        time.sleep(5)
+
+# === Start threads ===
 threading.Thread(target=run).start()
+threading.Thread(target=telegram_listener).start()
